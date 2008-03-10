@@ -10,8 +10,7 @@
 -- Stability   :  experimental
 -- Portability :  portable
 --
--- An incremental LL(1) parser combinator library.  This module is
--- intended to be imported together with 'Control.Applicative'.
+-- An incremental LL(1) parser combinator library.
 --
 ------------------------------------------------------------------------
 
@@ -25,11 +24,12 @@ module Hyena.Parser
       -- * Primitive parsers
       satisfy,
       byte,
-      bytes
+      bytes,
+
+      module Control.Applicative
     ) where
 
-import Control.Applicative (Alternative(..), Applicative(..), liftA2)
-import Control.Monad (Functor(..))
+import Control.Applicative
 import qualified Data.ByteString as S
 import Data.Int (Int64)
 import Data.Word (Word8)
