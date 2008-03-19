@@ -1,0 +1,5 @@
+Hyena
+=====
+
+Hyena is a simple web application container that can be used to run
+Haskell web applications behind more robust web servers like Apache.
