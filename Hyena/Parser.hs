@@ -114,6 +114,7 @@ finished v s = IFinished v s
 failed :: S -> IResult a
 failed (S _ pos _) = IFailed pos
 
+-- | TODO: Write documentation.
 runParser :: Parser a -> S.ByteString -> Result a
 runParser p bs = toResult $ unParser p (initState bs) finished failed
 
@@ -137,7 +138,6 @@ satisfy p =
                                  Just bs' -> retry (S bs' pos eof)
                                  Nothing  -> fail (S bs pos True)
             where retry s' = unParser (satisfy p) s' succ fail
-{-# INLINE satisfy #-}
 
 -- | @byte b@ parses a single byte @b@.  Returns the parsed byte
 -- (i.e. @b@).
@@ -152,4 +152,3 @@ bytes = fmap S.pack . go
       go bs = case S.uncons bs of
                 Just (b, bs') -> liftA2 (:) (byte b) (go bs')
                 Nothing       -> pure []
-

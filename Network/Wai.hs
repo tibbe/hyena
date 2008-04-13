@@ -2,7 +2,7 @@
 
 ------------------------------------------------------------------------
 -- |
--- Module      :  Hyena.Application
+-- Module      :  Network.Wai
 -- Copyright   :  (c) Johan Tibell 2008
 -- License     :  BSD3-style (see LICENSE)
 --
@@ -18,12 +18,10 @@
 -- >
 -- > import qualified Data.ByteString as S
 -- > import qualified Data.ByteString.Char8 as C (pack, unpack)
+-- > import Network.Wai (Application(..), Enumerator(..))
 -- > import System.Directory (getCurrentDirectory)
 -- > import System.FilePath ((</>), makeRelative)
 -- > import System.IO
--- >
--- > import Hyena.Application
--- > import Hyena.Server
 -- >
 -- > sendFile :: FilePath -> IO Enumerator
 -- > sendFile fname = do
@@ -45,14 +43,11 @@
 -- >   let contentType = (C.pack "Content-Type",
 -- >                      C.pack "application/octet-stream")
 -- >   enumerator <- sendFile $ C.unpack $ pathInfo environ
--- >   return (200, [contentType], enumerator)
--- >
--- > main :: IO ()
--- > main = serve fileServer
--- > --
+-- >   return (200, pack "OK", [contentType], enumerator)
+--
 ------------------------------------------------------------------------
 
-module Hyena.Application
+module Network.Wai
     ( -- * The Application type
       Application,
       Enumerator,
@@ -110,5 +105,5 @@ type Enumerator = forall a. (a -> S.ByteString -> IO (Either a a)) -> a -> IO a
 -- | An application takes an environment and returns a HTTP status
 -- code, a sequence of headers and an 'Enumerator' containing the
 -- response body.
-type Application = Environment -> IO (Int, Headers, Enumerator)
+type Application = Environment -> IO (Int, S.ByteString, Headers, Enumerator)
 

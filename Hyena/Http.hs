@@ -43,8 +43,8 @@ import Data.Maybe (fromJust)
 import Data.Word (Word8)
 import Network.Socket (Socket)
 import Network.Socket.ByteString (send)
+import Network.Wai (Enumerator, Headers, Method(..))
 
-import Hyena.Application (Enumerator, Headers, Method(..))
 import Hyena.BufferedSocket
 import Hyena.Parser
 
@@ -72,6 +72,7 @@ data IRequest = IRequest
 -- | An HTTP response.
 data Response = Response
     { statusCode      :: Int
+    , reasonPhrase    :: S.ByteString
     , responseHeaders :: [(S.ByteString, S.ByteString)]
     , responseBody    :: Enumerator
     }
@@ -86,11 +87,10 @@ blockSize = 4 * 1024
 -- | Send response over socket.
 sendResponse :: Socket -> Response -> IO ()
 sendResponse sock resp = do
-  let reasonPhrase = fromJust $ M.lookup (statusCode resp) reasonPhrases
   -- TODO: Check if all data was sent.
   send sock $ (C.pack $ "HTTP/1.1 ")
   send sock $ (C.pack $ show (statusCode resp) ++ " "
-                      ++ (C.unpack $ reasonPhrase))
+                      ++ (C.unpack $ reasonPhrase resp))
   send sock $ C.pack "\r\n"
   sendHeaders sock (responseHeaders resp)
   send sock $ C.pack "\r\n"
@@ -159,6 +159,7 @@ errorResponse :: Int -> Response
 errorResponse status =
     Response
     { statusCode      = status
+    , reasonPhrase    = fromJust $ M.lookup status reasonPhrases
     , responseHeaders = [(C.pack "Connection", C.pack "close")]
     , responseBody    = emptyMessageBody
     }
