@@ -46,6 +46,7 @@ data Config = Config
     -- ^ Port to bind to when listening for connections.
     } deriving Show
 
+-- | Converts a set of flags into a server configuration.
 flagsToConfig :: Flags -> IO Config
 flagsToConfig flags = do
   when (flag flagDaemonize) $
@@ -100,7 +101,7 @@ instance Monoid (Flag a) where
 
 fromFlag :: Flag a -> a
 fromFlag (Flag x) = x
-fromFlag NoFlag   = error "fromFlag NoFlag. Use fromFlagOrDefault"
+fromFlag NoFlag   = error "fromFlag NoFlag"
 
 -- ---------------------------------------------------------------------
 -- Config flags
@@ -147,12 +148,16 @@ instance Monoid Flags where
 -- ---------------------------------------------------------------------
 -- Args parsing
 
+-- | Converts a 'String' containing a port number to an integer and
+-- fails with an 'error' if the 'String' contained non-digit
+-- characters.
 flagToPort :: String -> Int
 flagToPort str =
     case reads str of
       [(i, "")] -> i
       _         -> error $ "--port: invalid port `" ++ str ++ "'"
 
+-- | The command line options.
 options :: [OptDescr (Flags -> Flags)]
 options =
     [Option "a" ["address"]
@@ -175,6 +180,8 @@ options =
                 "bind to PORT on localhost"
     ]
 
+-- | Parses the given command line arguments.  Returns either the
+-- parsed flags or a 'String' explaining the error on failure.
 parseArgs :: [String] -> String -> Either String Flags
 parseArgs argv progName =
     case getOpt Permute options argv of
