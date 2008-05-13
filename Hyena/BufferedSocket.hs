@@ -13,14 +13,19 @@ import Network.Socket.ByteString (recv)
 
 import Network.Wai (Enumerator)
 
+-- | A 'BufferedSocket' reads data in blocks from the network and is
+-- more efficient than a normal 'Socket'.
 data BufferedSocket = BufferedSocket
     { buffer :: IORef S.ByteString
     , socket :: Socket
     }
 
+-- | The maximum amount of data to fetch in every read from the
+-- 'Socket'.
 blockSize :: Int
 blockSize = 4 * 1024
 
+-- | Create a 'BufferedSocket' from an unbuffered 'Socket'.
 fromSocket :: Socket -> IO BufferedSocket
 fromSocket sock = do
   buffRef <- newIORef S.empty
@@ -29,6 +34,7 @@ fromSocket sock = do
              , socket = sock
              }
 
+-- | @readBlock bsock maxBytes@ reads up to @maxBytes@ from @bsock@.
 readBlock :: BufferedSocket -> Int -> IO S.ByteString
 readBlock bsock n = do
   buf <- readIORef $ buffer bsock
@@ -45,10 +51,14 @@ readBlock bsock n = do
                       return bs'
           | otherwise       = return bs
 
+-- | Pushes back some data to the socket so it can later be read by
+-- 'readBlock'.
 putBackBlock :: BufferedSocket -> S.ByteString -> IO ()
 putBackBlock bsock bs = do
   modifyIORef (buffer bsock) (flip S.append bs)
 
+-- | @toEnumerator bsock maxBytes@ creates an enumerator that iterates
+-- over @max_bytes@ bytes from @bsock@.
 toEnumerator :: BufferedSocket -> Int -> Enumerator
 toEnumerator bsock maxBytes = go maxBytes
     where
