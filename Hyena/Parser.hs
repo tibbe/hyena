@@ -82,20 +82,27 @@ newtype Parser a = Parser
 
 instance Functor Parser where
     fmap f p = Parser $ \s succ fail -> unParser p s (succ . f) fail
+    {-# INLINE fmap #-}
 
 instance Applicative Parser where
     pure a = Parser $ \s succ _ -> succ a s
+    {-# INLINE pure #-}
+
     p <*> p' = Parser $ \s succ fail ->
                flip (unParser p s) fail $ \f s' ->
                    unParser p' s' (succ . f) fail
+    {-# INLINE (<*>) #-}
 
 instance Alternative Parser where
     empty = Parser $ \s _ fail -> fail s
+    {-# INLINE empty #-}
+
     p <|> p' = Parser $ \s@(S _ pos _) succ fail ->
                unParser p s succ $ \s'@(S _ pos' _) ->
                    if pos == pos'
                    then unParser p' s' succ fail
                    else fail s'
+    {-# INLINE (<|>) #-}
 
 -- ---------------------------------------------------------------------
 -- Running a parser
@@ -152,3 +159,4 @@ bytes = fmap S.pack . go
       go bs = case S.uncons bs of
                 Just (b, bs') -> liftA2 (:) (byte b) (go bs')
                 Nothing       -> pure []
+
