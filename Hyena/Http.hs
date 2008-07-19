@@ -36,6 +36,7 @@ module Hyena.Http
 import Control.Monad (forM_)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as C (map, pack, unpack)
+import Data.ByteString.Parser
 import Data.Char (chr, digitToInt, isAlpha, isDigit, isSpace, ord, toLower)
 import Data.Either (either)
 import qualified Data.Map as M
@@ -46,7 +47,6 @@ import Network.Socket.ByteString (send)
 import Network.Wai (Enumerator, Headers, Method(..))
 
 import Hyena.BufferedSocket
-import Hyena.Parser
 
 -- ---------------------------------------------------------------------
 -- Request and response data types
@@ -173,9 +173,9 @@ c2w = fromIntegral . ord
 -- | Parsers for different tokens in an HTTP request.
 sp, digit, letter, nonSpace, notEOL :: Parser Word8
 sp = byte $ c2w ' '
-digit = satisfy (isDigit . chr . fromIntegral)
-letter = satisfy (isAlpha . chr . fromIntegral)
-nonSpace = satisfy (not . isSpace . chr . fromIntegral)
+digit = satisfies (isDigit . chr . fromIntegral)
+letter = satisfies (isAlpha . chr . fromIntegral)
+nonSpace = satisfies (not . isSpace . chr . fromIntegral)
 notEOL = noneOf $ map c2w "\r\n"
 
 -- | Parser for request \"\r\n\" sequence.
@@ -185,8 +185,8 @@ crlf = bytes $ C.pack "\r\n"
 -- | Parser that recognize if the current byte is an element of the
 -- given sequence of bytes.
 oneOf, noneOf :: [Word8] -> Parser Word8
-oneOf bs = satisfy (`elem` bs)
-noneOf bs = satisfy (`notElem` bs)
+oneOf bs = satisfies (`elem` bs)
+noneOf bs = satisfies (`notElem` bs)
 
 -- | Parser for zero or more spaces.
 spaces :: Parser [Word8]
@@ -259,7 +259,7 @@ fieldChars = fmap S.pack $ many fieldChar
 
 -- | Parser for one header field byte.
 fieldChar :: Parser Word8
-fieldChar = satisfy isFieldChar
+fieldChar = satisfies isFieldChar
     where
       isFieldChar b = (isDigit $ chr $ fromIntegral b) ||
                       (isAlpha $ chr $ fromIntegral b) ||

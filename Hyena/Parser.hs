@@ -10,7 +10,7 @@
 -- Stability   :  experimental
 -- Portability :  portable
 --
--- An incremental LL(1) parser combinator library.
+-- A resumable LL(1) parser combinator library for 'ByteString's.
 --
 ------------------------------------------------------------------------
 
@@ -22,7 +22,7 @@ module Hyena.Parser
       runParser,
 
       -- * Primitive parsers
-      satisfy,
+      satisfies,
       byte,
       bytes,
 
@@ -31,9 +31,13 @@ module Hyena.Parser
 
 import Control.Applicative
 import qualified Data.ByteString as S
+import qualified Data.ByteString.Internal as S
 import Data.Int (Int64)
 import Data.Word (Word8)
-import Prelude hiding (fail, succ)
+import Foreign.ForeignPtr (withForeignPtr)
+import Foreign.Ptr (Ptr, plusPtr)
+import Foreign.Storable (peekByteOff)
+import Prelude hiding (fail, rem, succ)
 
 -- ---------------------------------------------------------------------
 -- The Parser type
@@ -128,11 +132,11 @@ runParser p bs = toResult $ unParser p (initState bs) finished failed
 -- ---------------------------------------------------------------------
 -- Primitive parsers
 
--- | The parser @satisfy p@ succeeds for any byte for which the
+-- | The parser @satisfies p@ succeeds for any byte for which the
 -- supplied function @p@ returns 'True'.  Returns the byte that is
 -- actually parsed.
-satisfy :: (Word8 -> Bool) -> Parser Word8
-satisfy p =
+satisfies :: (Word8 -> Bool) -> Parser Word8
+satisfies p =
     Parser $ \s@(S bs pos eof) succ fail ->
         case S.uncons bs of
           Just (b, bs') -> if p b
@@ -144,19 +148,52 @@ satisfy p =
                                case x of
                                  Just bs' -> retry (S bs' pos eof)
                                  Nothing  -> fail (S bs pos True)
-            where retry s' = unParser (satisfy p) s' succ fail
+            where retry s' = unParser (satisfies p) s' succ fail
 
 -- | @byte b@ parses a single byte @b@.  Returns the parsed byte
 -- (i.e. @b@).
 byte :: Word8 -> Parser Word8
-byte b = satisfy (== b)
+byte b = satisfies (== b)
 
 -- | @bytes bs@ parses a sequence of bytes @bs@.  Returns the parsed
 -- bytes (i.e. @bs@).
 bytes :: S.ByteString -> Parser S.ByteString
-bytes = fmap S.pack . go
-    where
-      go bs = case S.uncons bs of
-                Just (b, bs') -> liftA2 (:) (byte b) (go bs')
-                Nothing       -> pure []
+bytes bs =
+    Parser $ \(S bs' pos eof) succ fail ->
+        let go rem inp
+                | len == remLen =
+                    succ bs (S (S.drop len inp) newPos eof)
+                | len < remLen && inpLen >= remLen =
+                    fail (S (S.drop len inp) newPos eof)
+                | otherwise =
+                    IPartial $ \x ->
+                        case x of
+                          Just bs'' -> go (S.drop len rem) bs''
+                          Nothing   -> fail (S (S.empty) newPos True)
+                where
+                  len    = commonPrefixLen rem inp
+                  remLen = S.length rem
+                  newPos = pos + fromIntegral len
+                  inpLen = S.length inp
+        in go bs bs'
 
+-- ---------------------------------------------------------------------
+-- Internal utilities
+
+-- | /O(n)/ @commonPrefixLen xs ys@ returns the length of the longest
+-- common prefix of @xs@ and @ys@.
+commonPrefixLen :: S.ByteString -> S.ByteString -> Int
+commonPrefixLen (S.PS fp1 off1 len1) (S.PS fp2 off2 len2) =
+    S.inlinePerformIO $
+     withForeignPtr fp1 $ \p1 ->
+         withForeignPtr fp2 $ \p2 ->
+             lcp (p1 `plusPtr` off1) (p2 `plusPtr` off2) 0 len1 len2
+
+lcp :: Ptr Word8 -> Ptr Word8 -> Int -> Int -> Int-> IO Int
+lcp p1 p2 n len1 len2
+    | n == len1 = return len1
+    | n == len2 = return len2
+    | otherwise = do
+        a <- peekByteOff p1 n :: IO Word8
+        b <- peekByteOff p2 n
+        if a == b then lcp p1 p2 (n + 1) len1 len2 else return n
