@@ -38,16 +38,23 @@ import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Ptr (Ptr, plusPtr)
 import Foreign.Storable (peekByteOff)
 import Prelude hiding (fail, rem, succ)
+import Text.Show.Functions ()
 
 -- ---------------------------------------------------------------------
 -- The Parser type
 
 -- | The parse state.
-data S = S
+data S r = S
     {-# UNPACK #-} !S.ByteString
     {-# UNPACK #-} !Int64
     {-# UNPACK #-} !Bool
+    {-# UNPACK #-} !(S r -> Result r)
          deriving Show
+
+-- | Set the failure continuation.
+setFail :: S r -> (S r -> Result r) -> S r
+setFail (S bs pos eof _) fail = S bs pos eof fail
+{-# INLINE setFail #-}
 
 -- | A parse either succeeds, fails or returns a suspension with which
 -- the parsing can be resumed.
@@ -65,69 +72,58 @@ data Result a = Finished a S.ByteString
               -- @Just input@ to continue parsing and @Nothing@ to
               -- signal end of input. If @Nothing@ is passed the
               -- 'Result' is either 'Finished' or 'Failed'.
+                deriving Show
 
-data IResult a = IFinished a S
-               | IFailed Int64
-               | IPartial (Maybe S.ByteString -> IResult a)
-
-toResult :: IResult a -> Result a
-toResult (IFinished a (S bs _ _)) = Finished a bs
-toResult (IFailed pos)            = Failed pos
-toResult (IPartial k)             = Partial $ toResult . k
-
--- | A parser takes a parse state, a success continuation and a
--- failure continuation and returns a 'Result'.
+-- | A parser takes a parse state, a success continuation and returns
+-- a 'Result'.
 newtype Parser a = Parser
-    { unParser :: forall r.
-                  S -> (a -> S -> IResult r) -> (S -> IResult r) -> IResult r }
+    { unParser :: forall r. S r -> (a -> S r -> Result r) -> Result r }
 
 -- ---------------------------------------------------------------------
 -- Instances
 
 instance Functor Parser where
-    fmap f p = Parser $ \s succ fail -> unParser p s (succ . f) fail
+    fmap f p = Parser $ \s succ -> unParser p s (succ . f)
     {-# INLINE fmap #-}
 
 instance Applicative Parser where
-    pure a = Parser $ \s succ _ -> succ a s
+    pure a = Parser $ \s succ -> succ a s
     {-# INLINE pure #-}
 
-    p <*> p' = Parser $ \s succ fail ->
-               flip (unParser p s) fail $ \f s' ->
-                   unParser p' s' (succ . f) fail
+    p <*> p' = Parser $ \s succ ->
+               let succ' f s' = unParser p' s' (succ . f)
+               in unParser p s succ'
     {-# INLINE (<*>) #-}
 
 instance Alternative Parser where
-    empty = Parser $ \s _ fail -> fail s
+    empty = Parser $ \s@(S _ _ _ fail) _ -> fail s
     {-# INLINE empty #-}
 
-    p <|> p' = Parser $ \s@(S _ pos _) succ fail ->
-               unParser p s succ $ \s'@(S _ pos' _) ->
-                   if pos == pos'
-                   then unParser p' s' succ fail
-                   else fail s'
+    p <|> p' = Parser $ \s@(S _ _ _ fail) succ ->
+               let fail' s' = unParser p' (setFail s' fail) succ
+               in unParser p (setFail s fail') succ
     {-# INLINE (<|>) #-}
 
 -- ---------------------------------------------------------------------
 -- Running a parser
 
-initState :: S.ByteString -> S
-initState bs = S bs 0 False
+initState :: S.ByteString -> S r
+initState bs = S bs 0 False failed
 {-# INLINE initState #-}
 
 -- | This is the final continuation that turns a successful parse into
--- a 'IResult'.
-finished :: a -> S -> IResult a
-finished v s = IFinished v s
+-- a 'Result'.
+finished :: a -> S r -> Result a
+finished v (S bs _ _ _) = Finished v bs
 
 -- | This is the final continuation that turns an unsuccessful parse
--- into a 'IResult'.
-failed :: S -> IResult a
-failed (S _ pos _) = IFailed pos
+-- into a 'Result'.
+failed :: S r -> Result a
+failed (S _ pos _ _) = Failed pos
 
 -- | TODO: Write documentation.
 runParser :: Parser a -> S.ByteString -> Result a
-runParser p bs = toResult $ unParser p (initState bs) finished failed
+runParser p bs = unParser p (initState bs) finished
 
 -- ---------------------------------------------------------------------
 -- Primitive parsers
@@ -137,39 +133,41 @@ runParser p bs = toResult $ unParser p (initState bs) finished failed
 -- actually parsed.
 satisfies :: (Word8 -> Bool) -> Parser Word8
 satisfies p =
-    Parser $ \s@(S bs pos eof) succ fail ->
+    Parser $ \s@(S bs pos eof fail) succ ->
         case S.uncons bs of
           Just (b, bs') -> if p b
-                           then succ b (S bs' (pos + 1) eof)
+                           then succ b (S bs' (pos + 1) eof failed)
                            else fail s
           Nothing       -> if eof
                            then fail s
-                           else IPartial $ \x ->
+                           else Partial $ \x ->
                                case x of
-                                 Just bs' -> retry (S bs' pos eof)
-                                 Nothing  -> fail (S bs pos True)
-            where retry s' = unParser (satisfies p) s' succ fail
+                                 Just bs' -> retry (S bs' pos eof fail)
+                                 Nothing  -> fail (S bs pos True fail)
+            where retry s' = unParser (satisfies p) s' succ
 
 -- | @byte b@ parses a single byte @b@.  Returns the parsed byte
 -- (i.e. @b@).
 byte :: Word8 -> Parser Word8
 byte b = satisfies (== b)
 
+-- TODO: Check when we can let go of the failure continuation.
+
 -- | @bytes bs@ parses a sequence of bytes @bs@.  Returns the parsed
 -- bytes (i.e. @bs@).
 bytes :: S.ByteString -> Parser S.ByteString
 bytes bs =
-    Parser $ \(S bs' pos eof) succ fail ->
+    Parser $ \s@(S bs' pos eof fail) succ ->
         let go rem inp
                 | len == remLen =
-                    succ bs (S (S.drop len inp) newPos eof)
+                    succ bs (S (S.drop len inp) newPos eof failed)
                 | len < remLen && inpLen >= remLen =
-                    fail (S (S.drop len inp) newPos eof)
+                    fail (S (S.drop len inp) newPos eof fail)
                 | otherwise =
-                    IPartial $ \x ->
+                    Partial $ \x ->
                         case x of
                           Just bs'' -> go (S.drop len rem) bs''
-                          Nothing   -> fail (S (S.empty) newPos True)
+                          Nothing   -> fail (S (S.empty) newPos True fail)
                 where
                   len    = commonPrefixLen rem inp
                   remLen = S.length rem
