@@ -33,16 +33,16 @@ import System.IO (BufferMode(..), Handle, IOMode(..), hSetBuffering, openFile,
 
 -- | The server configuration.
 data Config = Config
-    { address   :: !String
+    { address   :: String
     -- ^ Address (hostname or IP) to bind to when listening for
     -- connections.
-    , daemonize :: !Bool
+    , daemonize :: Bool
     -- ^ Run in the background.
-    , debug     :: !Bool
+    , debug     :: Bool
     -- ^ Print lots of debug information.
-    , logHandle :: !Handle
+    , logHandle :: Handle
     -- ^ Where to dump log messages in daemon mode.
-    , port      :: !Int
+    , port      :: Int
     -- ^ Port to bind to when listening for connections.
     } deriving Show
 
