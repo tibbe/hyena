@@ -36,17 +36,17 @@ module Hyena.Http
 import Control.Monad (forM_)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as C (map, pack, unpack)
-import Data.ByteString.Parser
 import Data.Char (chr, digitToInt, isAlpha, isDigit, isSpace, ord, toLower)
 import Data.Either (either)
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import Data.Word (Word8)
 import Network.Socket (Socket)
-import Network.Socket.ByteString (send)
+import Network.Socket.ByteString (recv, send)
 import Network.Wai (Enumerator, Headers, Method(..))
 
-import Hyena.BufferedSocket
+import Data.Enumerator
+import Hyena.Parser
 
 -- ---------------------------------------------------------------------
 -- Request and response data types
@@ -116,21 +116,24 @@ sendHeaders sock headers =
 -- 'Nothing' is returned.
 receiveRequest :: Socket -> IO (Maybe Request)
 receiveRequest sock = do
-  bsock <- fromSocket sock
-  x <- parseIRequest bsock
+  x <- parseIRequest sock
   case x of
     Nothing  -> return Nothing
-    Just req ->
-        return $ do
-           len <- contentLength req
-           return $
-                  Request
-                  { method         = iMethod req
-                  , requestUri     = iRequestUri req
-                  , httpVersion    = iHttpVersion req
-                  , requestHeaders = iRequestHeaders req
-                  , requestBody    = toEnumerator bsock len
-                  }
+    Just (req, bs) ->
+        let len  = contentLength req
+            -- TODO: Add length?
+            rest = bytesEnum bs
+            enum = case len of
+                     Just n  -> partialSocketEnum sock n
+                     Nothing -> chunkEnum $ socketEnum sock
+        in return $ Just $
+           Request
+           { method         = iMethod req
+           , requestUri     = iRequestUri req
+           , httpVersion    = iHttpVersion req
+           , requestHeaders = iRequestHeaders req
+           , requestBody    = compose rest enum
+           }
 
 -- | The length of the request's message body, if present.
 contentLength :: IRequest -> Maybe Int
@@ -196,16 +199,15 @@ spaces = many sp
 -- body) of an HTTP request.  Returns any bytes read that were not
 -- used when parsing.  Returns @Nothing@ on failure and @Just
 -- (request, remaining)@ on success.
-parseIRequest :: BufferedSocket -> IO (Maybe IRequest)
-parseIRequest bsock = do
-  initial <- readBlock bsock blockSize
+parseIRequest :: Socket -> IO (Maybe (IRequest, S.ByteString))
+parseIRequest sock = do
+  initial <- recv sock blockSize
   go $ runParser pIRequest initial
     where
-      go (Finished req bs) = do putBackBlock bsock bs
-                                return $ Just req
+      go (Finished req bs) = return $ Just (req, bs)
       go (Failed _)        = return Nothing
       -- TODO: Detect end of input.
-      go (Partial k)       = readBlock bsock blockSize >>= go . k . Just
+      go (Partial k)       = recv sock blockSize >>= go . k . Just
 
 -- | Parser for the internal request data type.
 pIRequest :: Parser IRequest
@@ -338,3 +340,4 @@ parseRequest input =
                      , requestBody    = \f z -> either id id `fmap` (f z bs)
                      }
          in return $ Just (req', S.empty)
+
