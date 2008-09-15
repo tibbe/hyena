@@ -1,0 +1,8 @@
+TODO
+====
+
+* Make the HTTP parser use a byte set for representing the allowed
+  bytes at any given point.
+
+* Use fewer system calls when sending responses.  Either concatenate
+  the byte strings or use a scattering write.
