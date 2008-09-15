@@ -88,10 +88,10 @@ blockSize = 4 * 1024
 sendResponse :: Socket -> Response -> IO ()
 sendResponse sock resp = do
   -- TODO: Check if all data was sent.
-  send sock $ (C.pack $ "HTTP/1.1 ")
-  send sock $ (C.pack $ show (statusCode resp) ++ " "
-                      ++ (C.unpack $ reasonPhrase resp))
-  send sock $ C.pack "\r\n"
+  send sock $ S.concat [C.pack $ "HTTP/1.1 "
+                       ,(C.pack $ show (statusCode resp) ++ " "
+                              ++(C.unpack $ reasonPhrase resp))
+                       ,C.pack "\r\n"]
   sendHeaders sock (responseHeaders resp)
   send sock $ C.pack "\r\n"
   (responseBody resp) (sendMessageBody sock) ()
@@ -100,17 +100,24 @@ sendResponse sock resp = do
 -- TODO: Check if all bytes were sent, otherwise retry.
 
 -- | Iteratee used for sending message body over socket.
-sendMessageBody :: Socket -> () -> S.ByteString -> IO (Either() ())
+sendMessageBody :: Socket -> () -> S.ByteString -> IO (Either () ())
 sendMessageBody sock _ bs = send sock bs >> return (Right ())
 
 -- | Send headers over socket.
 sendHeaders :: Socket -> Headers -> IO ()
-sendHeaders sock headers =
-    forM_ headers $ \(k, v) -> do
-      send sock k
-      send sock $ C.pack ": "
-      send sock v
-      send sock $ C.pack "\r\n"
+sendHeaders sock headers = do
+  send sock $ S.concat $ map go headers
+  return ()
+    where go (k, v) = S.concat [k, C.pack ": "
+                               ,v, C.pack "\r\n"]
+
+-- sendHeaders :: Socket -> Headers -> IO ()
+-- sendHeaders sock headers =
+--     forM_ headers $ \(k, v) -> do
+--       send sock k
+--       send sock $ C.pack ": "
+--       send sock v
+--       send sock $ C.pack "\r\n"
 
 -- | Receive request from socket.  If the request is malformed
 -- 'Nothing' is returned.
@@ -121,7 +128,6 @@ receiveRequest sock = do
     Nothing  -> return Nothing
     Just (req, bs) ->
         let len  = contentLength req
-            -- TODO: Add length?
             rest = bytesEnum bs
             enum = case len of
                      Just n  -> partialSocketEnum sock n
