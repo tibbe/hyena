@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, ScopedTypeVariables #-}
 
 ------------------------------------------------------------------------
 -- |
@@ -21,7 +21,7 @@ module Hyena.Server
     ) where
 
 import Control.Concurrent (ThreadId, forkIO)
-import Control.Exception (Exception(..), bracket, catch, finally, throw)
+import Control.Exception.Extensible
 import Control.Monad (unless, when)
 import Control.Monad.Reader (MonadIO, MonadReader, ReaderT, ask, asks,
                              liftIO, runReaderT)
@@ -34,7 +34,7 @@ import Network.Socket (Family(..), HostAddress, SockAddr(..), Socket,
                        setSocketOption, socket, withSocketsDo)
 import Network.Wai
 import Prelude hiding (catch, log)
-import System.Exit (exitFailure)
+import System.Exit (exitFailure, ExitCode(..))
 import System.IO (Handle, stderr, hPutStrLn)
 import System.Posix.Signals (Handler(..), installHandler, sigPIPE)
 
@@ -69,13 +69,13 @@ runServer conf (Server a) = runReaderT a conf
 
 -- | Run action in the server monad, and in case of exception, and
 -- catch it and run the error case.
-catchServer :: Server a -> (Exception -> Server a) -> Server a
+catchServer ::Server a -> (forall e. (Exception e) => e ->Server a) -> Server a
 catchServer m k = do
   conf <- ask
-  io $ runServer conf m `catch` \e ->
-      case e of
-        ExitException {} -> throw e
-        _                -> runServer conf $ k e
+  io $ runServer conf m `catches` handlers conf
+    where handlers c 
+              = [ Handler $ \(e::ExitCode)      ->throw e
+                , Handler $ \(e::SomeException) ->runServer c $ k e ]
 
 -- | Run the first action and then the second action.  The second
 -- action is run even if the first action threw and exception.
