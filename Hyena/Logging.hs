@@ -59,9 +59,9 @@ startLogger writer logHandle = do
   chan <- newChan
   finished' <- newEmptyMVar
   forkIO $ logMessages chan finished'
-  return $ Logger { channel  = chan
-                  , finished = finished'
-                  }
+  return Logger { channel  = chan
+                , finished = finished'
+                }
     where
       logMessages chan finished' = do
         msg <- readChan chan
@@ -95,7 +95,7 @@ stopErrorLogger (ErrorLogger logger) = stopLogger logger
 
 -- | Log an error.
 logError :: ErrorLogger -> String -> IO ()
-logError (ErrorLogger logger) msg = writeChan (channel logger) $ Just msg
+logError (ErrorLogger logger) = writeChan (channel logger) . Just
 
 -- | Write error message to the given 'Handle'.
 writeError :: Handle -> String -> IO ()
@@ -104,7 +104,7 @@ writeError handle msg = hPutStr handle msg >> hFlush handle
 -- | Log a client request.
 logAccess :: AccessLogger -> Request -> Response -> HostAddress -> IO ()
 logAccess (AccessLogger logger) req resp haddr =
-    writeChan (channel logger) $ Just $
+    writeChan (channel logger) $ Just
               LogRequest
               { hostAddress = haddr
               , request     = req

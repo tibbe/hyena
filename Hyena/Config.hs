@@ -75,7 +75,7 @@ configFromFlags = do
   progName <- getProgName
   case parseArgs argv progName of
     Left err    -> putStr err >> exitFailure
-    Right flags -> flagsToConfig $ (defaultFlags cwd) `mappend` flags
+    Right flags -> flagsToConfig $ defaultFlags cwd `mappend` flags
 
 -- | A set of default options most users should use. Creates missing
 -- directories as needed for the default log file when in 'daemonize'd

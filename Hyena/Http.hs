@@ -37,6 +37,7 @@ import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as C (map, pack, unpack)
 import Data.Char (chr, digitToInt, isAlpha, isDigit, isSpace, ord, toLower)
 import Data.Either (either)
+import Control.Arrow
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import Data.Word (Word8)
@@ -147,7 +148,7 @@ contentLength req
 getHeader :: String -> IRequest -> Maybe S.ByteString
 getHeader hdr req = lookup (C.map toLower $ C.pack hdr) headers
     where
-      mapFst f = map (\(k, v) -> (f k, v))
+      mapFst  = map . first
       headers = mapFst (C.map toLower) (iRequestHeaders req)
 
 -- ---------------------------------------------------------------------
@@ -277,7 +278,7 @@ isValidStatusCode code = M.member code reasonPhrases
 
 -- | Mapping from status code to reason phrases.
 reasonPhrases :: M.Map Int S.ByteString
-reasonPhrases = M.fromList . map (\(k, v) -> (k, C.pack v)) $
+reasonPhrases = M.fromList . map (second C.pack) $
                 [(100, "Continue")
                 ,(101, "Switching Protocols")
                 ,(200, "OK")
@@ -337,4 +338,3 @@ parseRequest input =
                      , requestBody    = \f z -> either id id `fmap` f z bs
                      }
          in return $ Just (req', S.empty)
-

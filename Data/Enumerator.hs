@@ -48,7 +48,7 @@ chunkEnum enum f initSeed = fst `liftM` enum go (initSeed, Left S.empty)
                          chunkLen     = pHeader hdr
                      in case chunkLen of
                           Just n  -> go (seed, Right n) rest
-                          Nothing -> error $ "malformed header" ++ (show hdr)
+                          Nothing -> error $ "malformed header" ++ show hdr
           Nothing -> return $ Right (seed, Left (S.append acc bs))
       go (seed, Right n) bs  =
         let len = S.length bs

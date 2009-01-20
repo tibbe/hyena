@@ -29,19 +29,17 @@ blockSize = 4 * 1024
 fromSocket :: Socket -> IO BufferedSocket
 fromSocket sock = do
   buffRef <- newIORef S.empty
-  return $ BufferedSocket
-             { buffer = buffRef
-             , socket = sock
-             }
+  return BufferedSocket
+          { buffer = buffRef
+          , socket = sock
+          }
 
 -- | @readBlock bsock maxBytes@ reads up to @maxBytes@ from @bsock@.
 readBlock :: BufferedSocket -> Int -> IO S.ByteString
 readBlock bsock n = do
   buf <- readIORef $ buffer bsock
   if S.null buf
-     then do
-       bs <- recv (socket bsock) blockSize
-       split bs
+     then recv (socket bsock) blockSize >>= split
      else split buf
     where
       split bs
@@ -54,8 +52,7 @@ readBlock bsock n = do
 -- | Pushes back some data to the socket so it can later be read by
 -- 'readBlock'.
 putBackBlock :: BufferedSocket -> S.ByteString -> IO ()
-putBackBlock bsock bs = do
-  modifyIORef (buffer bsock) (flip S.append bs)
+putBackBlock bsock = modifyIORef (buffer bsock) . flip S.append
 
 -- | @toEnumerator bsock maxBytes@ creates an enumerator that iterates
 -- over @max_bytes@ bytes from @bsock@.

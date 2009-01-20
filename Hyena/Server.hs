@@ -128,14 +128,14 @@ serveWithConfig conf application = do
 -- | Start loggers, run an action using those loggers and when
 -- finished, stop the loggers.
 bracketLoggers :: Handle -> (AccessLogger -> ErrorLogger -> IO ()) -> IO ()
-bracketLoggers h m =
+bracketLoggers h =
     bracket (do accessLog <- startAccessLogger h
                 errorLog <- startErrorLogger stderr
                 return (accessLog, errorLog))
                 (\(accessLog, errorLog) -> do
                    stopErrorLogger errorLog
                    stopAccessLogger accessLog)
-                (\(accessLog, errorLog) -> m accessLog errorLog)
+                . uncurry
 
 -- | Open the server socket and start accepting connections.
 serve' :: Application -> Server ()
@@ -158,11 +158,11 @@ serve' application = do
 acceptConnections :: Application -> Socket -> Server ()
 acceptConnections application serverSock = do
   (sock, SockAddrInet _ haddr) <- io $ accept serverSock
-  forkServer $ ((talk sock haddr application `finallyServer`
-                 (io $ sClose sock))
-                `catchServer`
-                (\e -> do logger <- asks errorLogger
-                          io $ logError logger $ show e))
+  forkServer ((talk sock haddr application `finallyServer`
+               (io $ sClose sock))
+              `catchServer`
+              (\e -> do logger <- asks errorLogger
+                        io $ logError logger $ show e))
   acceptConnections application serverSock
 
 -- | Read the client input, parse the request, run the application,
@@ -190,12 +190,12 @@ run environ application = io $ do
   -- TODO: Check the validity of the returned status code and headers
   -- and log an error and send a 500 if either is invalid.
   (status, reason, headers', output) <- application environ
-  return $ Response
-             { statusCode      = status
-             , reasonPhrase    = reason
-             , responseHeaders = headers'
-             , responseBody    = output
-             }
+  return Response
+           { statusCode      = status
+           , reasonPhrase    = reason
+           , responseHeaders = headers'
+           , responseBody    = output
+           }
 
 -- | Check if the connection should be closed after processing this
 -- request.
