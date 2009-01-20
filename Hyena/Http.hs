@@ -33,7 +33,6 @@ module Hyena.Http
       parseRequest
     ) where
 
-import Control.Monad (forM_)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as C (map, pack, unpack)
 import Data.Char (chr, digitToInt, isAlpha, isDigit, isSpace, ord, toLower)
@@ -88,13 +87,13 @@ blockSize = 4 * 1024
 sendResponse :: Socket -> Response -> IO ()
 sendResponse sock resp = do
   -- TODO: Check if all data was sent.
-  send sock $ S.concat [C.pack $ "HTTP/1.1 "
+  send sock $ S.concat [C.pack "HTTP/1.1 "
                        ,(C.pack $ show (statusCode resp) ++ " "
                               ++(C.unpack $ reasonPhrase resp))
                        ,C.pack "\r\n"]
   sendHeaders sock (responseHeaders resp)
   send sock $ C.pack "\r\n"
-  (responseBody resp) (sendMessageBody sock) ()
+  responseBody resp (sendMessageBody sock) ()
   -- TODO: Flush the socket.
 
 -- TODO: Check if all bytes were sent, otherwise retry.
@@ -111,14 +110,6 @@ sendHeaders sock headers = do
     where go (k, v) = S.concat [k, C.pack ": "
                                ,v, C.pack "\r\n"]
 
--- sendHeaders :: Socket -> Headers -> IO ()
--- sendHeaders sock headers =
---     forM_ headers $ \(k, v) -> do
---       send sock k
---       send sock $ C.pack ": "
---       send sock v
---       send sock $ C.pack "\r\n"
-
 -- | Receive request from socket.  If the request is malformed
 -- 'Nothing' is returned.
 receiveRequest :: Socket -> IO (Maybe Request)
@@ -132,7 +123,7 @@ receiveRequest sock = do
             enum = case len of
                      Just n  -> partialSocketEnum sock n
                      Nothing -> chunkEnum $ socketEnum sock
-        in return $ Just $
+        in return $ Just
            Request
            { method         = iMethod req
            , requestUri     = iRequestUri req
@@ -250,11 +241,11 @@ pHeaders :: Parser [(S.ByteString, S.ByteString)]
 pHeaders = many header
     where
       header = liftA2 (,) fieldName (byte (c2w ':') *> spaces *> contents)
-      fieldName = liftA2 (S.cons) letter fieldChars
-      contents = liftA2 (S.append) (fmap S.pack $ some notEOL <* crlf)
+      fieldName = liftA2 S.cons letter fieldChars
+      contents = liftA2 S.append (fmap S.pack $ some notEOL <* crlf)
                  (continuation <|> pure S.empty)
-      continuation = liftA2 (S.cons) ((c2w ' ') <$
-                                      some (oneOf (map c2w " \t"))) contents
+      continuation = liftA2 S.cons (c2w ' ' <$
+                                    some (oneOf (map c2w " \t"))) contents
 
 -- It's important that all these three definitions are kept on the top
 -- level to have RULES fire correctly.
@@ -278,7 +269,7 @@ fieldChar = satisfies isFieldChar
 
 -- | An empty 'Enumerator' that just returns the passed in seed.
 emptyMessageBody :: Enumerator
-emptyMessageBody _ z = return z
+emptyMessageBody _ = return
 
 -- | Test if the given HTTP status code is valid.
 isValidStatusCode :: Int -> Bool
@@ -343,7 +334,7 @@ parseRequest input =
                      , requestUri     = iRequestUri req
                      , httpVersion    = iHttpVersion req
                      , requestHeaders = iRequestHeaders req
-                     , requestBody    = \f z -> either id id `fmap` (f z bs)
+                     , requestBody    = \f z -> either id id `fmap` f z bs
                      }
          in return $ Just (req', S.empty)
 

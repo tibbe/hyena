@@ -53,7 +53,7 @@ data S r = S
 
 -- | Set the failure continuation.
 setFail :: S r -> (S r -> Result r) -> S r
-setFail (S bs pos eof _) fail = S bs pos eof fail
+setFail (S bs pos eof _) = S bs pos eof
 {-# INLINE setFail #-}
 
 -- | A parse either succeeds, fails or returns a suspension with which
@@ -157,7 +157,7 @@ byte b = satisfies (== b)
 -- bytes (i.e. @bs@).
 bytes :: S.ByteString -> Parser S.ByteString
 bytes bs =
-    Parser $ \s@(S bs' pos eof fail) succ ->
+    Parser $ \(S bs' pos eof fail) succ ->
         let go rem inp
                 | len == remLen =
                     succ bs (S (S.drop len inp) newPos eof failed)
@@ -167,7 +167,7 @@ bytes bs =
                     Partial $ \x ->
                         case x of
                           Just bs'' -> go (S.drop len rem) bs''
-                          Nothing   -> fail (S (S.empty) newPos True fail)
+                          Nothing   -> fail (S S.empty newPos True fail)
                 where
                   len    = commonPrefixLen rem inp
                   remLen = S.length rem
