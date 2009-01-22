@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, ScopedTypeVariables #-}
+{-# LANGUAGE CPP, GeneralizedNewtypeDeriving, ScopedTypeVariables #-}
 
 ------------------------------------------------------------------------
 -- |
@@ -36,7 +36,9 @@ import Network.Wai
 import Prelude hiding (catch, log)
 import System.Exit (exitFailure, ExitCode(..))
 import System.IO (Handle, stderr, hPutStrLn)
+#ifndef mingw32_HOST_OS
 import System.Posix.Signals (Handler(..), installHandler, sigPIPE)
+#endif
 
 import Hyena.Config
 import Hyena.Http
@@ -108,7 +110,9 @@ serve application = do
 -- supplied server configuration.
 serveWithConfig :: Config -> Application -> IO ()
 serveWithConfig conf application = do
+#ifndef mingw32_HOST_OS
   installHandler sigPIPE Ignore Nothing
+#endif
   when (daemonize conf) $ do
     hPutStrLn stderr "Daemonized mode not supported at the moment."
     hPutStrLn stderr $ "If you need this feature please say so in " ++

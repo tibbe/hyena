@@ -22,6 +22,8 @@ library
                    filepath, network >= 2.1 && < 2.3,
                    mtl >= 1 && < 1.2,
                    network-bytestring >= 0.1.1.2 && < 0.2,
-                   unix, extensible-exceptions
+                   extensible-exceptions
+  if !os(windows)
+    build-depends:   unix
   extensions:        Rank2Types
   ghc-options:       -funbox-strict-fields -Wall
