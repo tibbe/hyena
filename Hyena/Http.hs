@@ -122,7 +122,7 @@ receiveRequest sock = do
         let len  = contentLength req
             rest = bytesEnum bs
             enum = case len of
-                     Just n  -> partialSocketEnum sock n
+                     Just n  -> partialSocketEnum sock (n - S.length bs)
                      Nothing -> chunkEnum $ socketEnum sock
         in return $ Just
            Request
