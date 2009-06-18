@@ -1,12 +1,15 @@
 name:                hyena
 version:             0.1
 synopsis:            Simple web application server
+description:
+  A simple web application server using iteratees.
 license:             BSD3
 license-file:        LICENSE
 author:              Johan Tibell
 maintainer:          johan.tibell@gmail.com
 build-type:          Simple
 cabal-version:       >= 1.6
+category:            Network
 
 library
   exposed-modules:   Hyena.Config
