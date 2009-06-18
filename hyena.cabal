@@ -1,32 +1,44 @@
-name:                hyena
-version:             0.1
-synopsis:            Simple web application server
+name:           hyena
+version:        0.1
+synopsis:       Simple web application server
 description:
   A simple web application server using iteratees.
-license:             BSD3
-license-file:        LICENSE
-author:              Johan Tibell
-maintainer:          johan.tibell@gmail.com
-build-type:          Simple
-cabal-version:       >= 1.6
-category:            Network
+license:        BSD3
+license-file:   LICENSE
+author:         Johan Tibell <johan.tibell@gmail.com>
+maintainer:     Johan Tibell <johan.tibell@gmail.com>
+build-type:     Simple
+cabal-version:  >= 1.6
+homepage:       http://github.com/tibbe/hyena
+category:       Network
 
 library
-  exposed-modules:   Hyena.Config
-                     Hyena.Server
-                     Network.Wai
+  exposed-modules:
+    Hyena.Config
+    Hyena.Server
+    Network.Wai
+  other-modules:
+    Data.Enumerator
+    Hyena.Http
+    Hyena.Logging
+    Hyena.Parser
 
-  other-modules:     Data.Enumerator
-                     Hyena.Http
-                     Hyena.Logging
-                     Hyena.Parser
+  build-depends:
+    base               == 4.*,
+    bytestring,
+    containers,
+    directory,
+    extensible-exceptions,
+    filepath,
+    mtl                >= 1 && < 1.2,
+    network            >= 2.1 && < 2.3,
+    network-bytestring >= 0.1.1.2 && < 0.2
 
-  build-depends:   base == 4.*, bytestring, containers, directory,
-                   filepath, network >= 2.1 && < 2.3,
-                   mtl >= 1 && < 1.2,
-                   network-bytestring >= 0.1.1.2 && < 0.2,
-                   extensible-exceptions
   if !os(windows)
-    build-depends:   unix
-  extensions:        Rank2Types
-  ghc-options:       -funbox-strict-fields -Wall
+    build-depends:
+      unix
+
+  extensions: Rank2Types
+  ghc-options: -funbox-strict-fields -Wall
+  if impl(ghc >= 6.8)
+    ghc-options: -fwarn-tabs
