@@ -27,11 +27,15 @@ type EnumeratorM m = forall a. IterateeM a m -> a -> m a
 
 -- | Enumerates a 'ByteString'.
 bytesEnum :: Monad m => S.ByteString -> EnumeratorM m
-bytesEnum bs f seed = do
-  seed' <- f seed bs
-  case seed' of
-    Left seed''  -> return seed''
-    Right seed'' -> return seed''
+bytesEnum bs f seed =
+  let block = S.take blockSize bs
+  in if S.null block
+     then return seed
+     else do
+       seed' <- f seed block
+       case seed' of
+         Left seed''  -> return seed''
+         Right seed'' -> bytesEnum (S.drop blockSize bs) f seed''
 
 
 nl :: Word8
