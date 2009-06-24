@@ -175,8 +175,9 @@ talk :: Socket -> HostAddress -> Application -> Server ()
 talk sock haddr application = do
   req <- io $ receiveRequest sock
   case req of
-    Nothing  -> io $ sendResponse sock $ errorResponse 400
-    Just req' ->
+    ClientDisconnect  -> return ()
+    ParseError        -> io $ sendResponse sock $ errorResponse 400
+    ParseSuccess req' ->
         -- TODO: Validate the request:
         --    * If HTTP 1.1 Host MUST be present.
         do errorLogger' <- asks errorLogger

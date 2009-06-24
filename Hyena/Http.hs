@@ -20,6 +20,7 @@ module Hyena.Http
     ( -- * The request and response data types
       Request(..),
       Response(..),
+      ReceiveResult(..),
 
       -- * Sending and receiving
       sendResponse,
@@ -33,16 +34,19 @@ module Hyena.Http
       parseRequest
     ) where
 
+import Prelude hiding (catch)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as C (map, pack, unpack)
 import Data.Char (chr, digitToInt, isAlpha, isDigit, isSpace, ord, toLower)
 import Data.Either (either)
 import Control.Arrow
+import Control.Exception (IOException, catch, throw)
+import Control.Monad (when)
 import qualified Data.Map as M
-import Data.Maybe (fromJust)
+import Data.Maybe (isJust, fromJust)
 import Data.Word (Word8)
 import Network.Socket (Socket)
-import Network.Socket.ByteString (recv, send)
+import Network.Socket.ByteString (recv, sendAll)
 import Network.Wai (Enumerator, Headers, Method(..))
 
 import Data.Enumerator
@@ -77,6 +81,13 @@ data Response = Response
     , responseBody    :: Enumerator
     }
 
+-- | A data structure used to keep track of the result of parsing a
+-- request from the client.
+data ReceiveResult a = ParseSuccess a
+                     | ParseError
+                     | ClientDisconnect
+
+
 -- ---------------------------------------------------------------------
 -- Sending and receiving
 
@@ -87,44 +98,50 @@ blockSize = 4 * 1024
 -- | Send response over socket.
 sendResponse :: Socket -> Response -> IO ()
 sendResponse sock resp = do
-  -- TODO: Check if all data was sent.
-  send sock $ S.concat [C.pack "HTTP/1.1 "
-                       ,(C.pack $ show (statusCode resp) ++ " "
+  sendAll sock $ S.concat [C.pack "HTTP/1.1 "
+                          ,(C.pack $ show (statusCode resp) ++ " "
                               ++(C.unpack $ reasonPhrase resp))
-                       ,C.pack "\r\n"]
+                          ,C.pack "\r\n"]
   sendHeaders sock (responseHeaders resp)
-  send sock $ C.pack "\r\n"
-  responseBody resp (sendMessageBody sock) ()
+  sendAll sock $ C.pack "\r\n"
+  r <- responseBody resp (sendMessageBody sock) Nothing
+  when (isJust r) $ throw (fromJust r)
   -- TODO: Flush the socket.
 
--- TODO: Check if all bytes were sent, otherwise retry.
-
 -- | Iteratee used for sending message body over socket.
-sendMessageBody :: Socket -> () -> S.ByteString -> IO (Either () ())
-sendMessageBody sock _ bs = send sock bs >> return (Right ())
+sendMessageBody :: Socket
+                -> Maybe IOException
+                -> S.ByteString
+                -> IO (Either (Maybe IOException) (Maybe IOException))
+sendMessageBody sock _ bs =
+  catch (sendAll sock bs >> return (Right Nothing))
+        (\e -> return $ Left (Just e))
 
 -- | Send headers over socket.
 sendHeaders :: Socket -> Headers -> IO ()
 sendHeaders sock headers = do
-  send sock $ S.concat $ map go headers
+  sendAll sock $ S.concat $ map go headers
   return ()
     where go (k, v) = S.concat [k, C.pack ": "
                                ,v, C.pack "\r\n"]
 
--- | Receive request from socket.  If the request is malformed
--- 'Nothing' is returned.
-receiveRequest :: Socket -> IO (Maybe Request)
+-- | Receive request from socket.  Returns @ParseError@ on parse
+-- failure, @ClientDisconnect@ if the client disconnected
+-- unexpectedly, and @ParseSuccess request@ on success.
+receiveRequest :: Socket -> IO (ReceiveResult Request)
 receiveRequest sock = do
   x <- parseIRequest sock
   case x of
-    Nothing  -> return Nothing
-    Just (req, bs) ->
+    ClientDisconnect -> return ClientDisconnect
+    ParseError       -> return ParseError
+
+    ParseSuccess (req, bs) ->
         let len  = contentLength req
             rest = bytesEnum bs
             enum = case len of
                      Just n  -> partialSocketEnum sock (n - S.length bs)
                      Nothing -> chunkEnum $ socketEnum sock
-        in return $ Just
+        in return $ ParseSuccess
            Request
            { method         = iMethod req
            , requestUri     = iRequestUri req
@@ -195,17 +212,23 @@ spaces = many sp
 
 -- | Parses the header part (i.e. everything expect for the request
 -- body) of an HTTP request.  Returns any bytes read that were not
--- used when parsing.  Returns @Nothing@ on failure and @Just
--- (request, remaining)@ on success.
-parseIRequest :: Socket -> IO (Maybe (IRequest, S.ByteString))
+-- used when parsing.  Returns @ParseError@ on parse failure,
+-- @ClientDisconnect@ if the client disconnected unexpectedly, and
+-- @ParseSuccess (request, remaining)@ on success.
+parseIRequest :: Socket -> IO (ReceiveResult (IRequest, S.ByteString))
 parseIRequest sock = do
   initial <- recv sock blockSize
-  go $ runParser pIRequest initial
+  if S.null initial then
+    return ClientDisconnect
+    else go $ runParser pIRequest initial
     where
-      go (Finished req bs) = return $ Just (req, bs)
-      go (Failed _)        = return Nothing
-      -- TODO: Detect end of input.
-      go (Partial k)       = recv sock blockSize >>= go . k . Just
+      go (Finished req bs) = return $ ParseSuccess (req, bs)
+      go (Failed _)        = return ParseError
+      go (Partial k)       = do
+        received <- recv sock blockSize
+        if S.null received then do
+          return ClientDisconnect
+          else (go . k . Just) received
 
 -- | Parser for the internal request data type.
 pIRequest :: Parser IRequest
