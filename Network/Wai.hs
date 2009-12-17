@@ -14,19 +14,20 @@
 --
 -- Example application:
 --
+-- > {-# LANGUAGE Rank2Types, ImpredicativeTypes #-}
 -- > module Main where
--- >
+--
 -- > import qualified Data.ByteString as S
 -- > import qualified Data.ByteString.Char8 as C (pack, unpack)
--- > import Network.Wai (Application(..), Enumerator(..))
+-- > import Hyena.Server
+-- > import Network.Wai (Application, Enumerator, pathInfo)
 -- > import System.Directory (getCurrentDirectory)
 -- > import System.FilePath ((</>), makeRelative)
 -- > import System.IO
--- >
+--
 -- > sendFile :: FilePath -> IO Enumerator
--- > sendFile fname = do
--- >   cwd <- getCurrentDirectory
--- >   h <- openBinaryFile (cwd </> makeRelative "/" fname) ReadMode
+-- > sendFile path = do
+-- >   h <- openBinaryFile path ReadMode
 -- >   let yieldBlock f z = do
 -- >              block <- S.hGetNonBlocking h 1024
 -- >              if S.null block then hClose h >> return z
@@ -36,14 +37,25 @@
 -- >                    Left z''  -> hClose h >> return z''
 -- >                    Right z'' -> yieldBlock f z''
 -- >   return yieldBlock
--- >
+--
 -- > fileServer :: Application
 -- > fileServer environ = do
+-- >   cwd <- getCurrentDirectory
+-- >   let path = (cwd </> makeRelative "/" (C.unpack $ pathInfo environ))
+-- >   size <- getFileSize path
 -- >   -- Here you should add security checks, etc.
 -- >   let contentType = (C.pack "Content-Type",
--- >                      C.pack "application/octet-stream")
--- >   enumerator <- sendFile $ C.unpack $ pathInfo environ
--- >   return (200, pack "OK", [contentType], enumerator)
+-- >                      C.pack "text/plain")
+-- >       contentLength = (C.pack "Content-Length",
+-- >                        C.pack (show size))
+-- >   enumerator <- sendFile path
+-- >   return (200, C.pack "OK", [contentType,contentLength], enumerator)
+--
+-- > getFileSize :: String -> IO Integer
+-- > getFileSize fn = withFile fn ReadMode hFileSize
+--
+-- > main :: IO ()
+-- > main = serve fileServer
 --
 ------------------------------------------------------------------------
 
