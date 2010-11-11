@@ -58,7 +58,7 @@ startLogger :: (Handle -> a -> IO ()) -> Handle -> IO (Logger a)
 startLogger writer logHandle = do
   chan <- newChan
   finished' <- newEmptyMVar
-  forkIO $ logMessages chan finished'
+  _ <- forkIO $ logMessages chan finished'
   return Logger { channel  = chan
                 , finished = finished'
                 }
