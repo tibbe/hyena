@@ -1,5 +1,5 @@
 name:           hyena
-version:        0.1
+version:        0.1.0.1
 synopsis:       Simple web application server
 description:
   A simple web application server using iteratees.
