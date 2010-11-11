@@ -25,12 +25,12 @@ library
 
   build-depends:
     base               == 4.*,
-    bytestring,
-    containers,
+    bytestring         < 1.0,
+    containers         >= 0.3 && < 0.4,
     directory,
     extensible-exceptions,
     filepath,
-    mtl                >= 1 && < 1.2,
+    mtl                >= 1 && < 2.0.2,
     network            >= 2.1 && < 2.3,
     network-bytestring >= 0.1.1.2 && < 0.2
 
