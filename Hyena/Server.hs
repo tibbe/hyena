@@ -111,7 +111,7 @@ serve application = do
 serveWithConfig :: Config -> Application -> IO ()
 serveWithConfig conf application = do
 #ifndef mingw32_HOST_OS
-  installHandler sigPIPE Ignore Nothing
+  _ <- installHandler sigPIPE Ignore Nothing
 #endif
   when (daemonize conf) $ do
     hPutStrLn stderr "Daemonized mode not supported at the moment."
@@ -162,11 +162,11 @@ serve' application = do
 acceptConnections :: Application -> Socket -> Server ()
 acceptConnections application serverSock = do
   (sock, SockAddrInet _ haddr) <- io $ accept serverSock
-  forkServer ((talk sock haddr application `finallyServer`
-               (io $ sClose sock))
-              `catchServer`
-              (\e -> do logger <- asks errorLogger
-                        io $ logError logger $ show e))
+  _ <- forkServer ((talk sock haddr application `finallyServer`
+                    (io $ sClose sock))
+                   `catchServer`
+                   (\e -> do logger <- asks errorLogger
+                             io $ logError logger $ show e))
   acceptConnections application serverSock
 
 -- | Read the client input, parse the request, run the application,
